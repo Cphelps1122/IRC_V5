@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 import streamlit as st
 
 from utils.alerts import build_alerts
@@ -7,54 +9,75 @@ from utils.calculations import monthly_summary
 from utils.data_loader import load_data
 
 
-def data_source_sidebar() -> tuple[str, str | None, object | None]:
-    """Render the shared data-source controls used by every page."""
+def _secret(name: str, default=None):
+    try:
+        return st.secrets.get(name, default)
+    except Exception:
+        return default
+
+
+def _auto_refresh() -> None:
+    """Refresh the app automatically so Google Sheet edits appear without clicks."""
+    refresh_seconds = int(_secret("AUTO_REFRESH_SECONDS", 30) or 30)
+    refresh_seconds = max(refresh_seconds, 10)
+    try:
+        from streamlit_autorefresh import st_autorefresh
+        st_autorefresh(interval=refresh_seconds * 1000, key="google_sheet_auto_refresh")
+    except Exception:
+        # The app still reads live data on every normal Streamlit rerun. This message
+        # helps if requirements were not installed after patching.
+        st.sidebar.caption(
+            "Auto-refresh package missing. Run: pip install streamlit-autorefresh"
+        )
+
+
+def data_source_sidebar() -> tuple[str, object | None]:
+    """Render shared controls. Google Sheet mode is automatic, not user-entered."""
     st.sidebar.markdown("# 📊 Utility Analytics")
     st.sidebar.markdown("for Dialysis Centers")
     st.sidebar.divider()
-    st.sidebar.caption("Live mode: Google Sheets reloads on every page refresh/rerun.")
 
-    default_url = ""
-    try:
-        default_url = st.secrets.get("GOOGLE_SHEET_URL", "")
-    except Exception:
-        default_url = ""
+    _auto_refresh()
 
-    source = st.sidebar.radio(
-        "Data Source",
-        ["Google Sheet", "Sample Excel", "Upload Excel/CSV"],
-        index=0,
-        key="data_source",
-    )
-    google_sheet_url = None
+    source_options = ["Google Sheet", "Sample Excel", "Upload Excel/CSV"]
+    default_source = _secret("DATA_SOURCE", "Google Sheet")
+    default_index = source_options.index(default_source) if default_source in source_options else 0
+
+    source = st.sidebar.selectbox("Data Source", source_options, index=default_index, key="data_source")
+
     uploaded_file = None
-
     if source == "Google Sheet":
-        google_sheet_url = st.sidebar.text_input(
-            "Google Sheet share link or CSV export URL",
-            value=st.session_state.get("google_sheet_url", default_url),
-            key="google_sheet_url",
-        )
-        st.sidebar.caption("The sheet must be shared as viewable or published to the web.")
-        if st.sidebar.button("Refresh Google Sheet now", use_container_width=True):
-            st.cache_data.clear()
-            st.rerun()
+        worksheet = _secret("GOOGLE_WORKSHEET", "Property")
+        refresh_seconds = int(_secret("AUTO_REFRESH_SECONDS", 30) or 30)
+        st.sidebar.success("Live Google Sheet connected")
+        st.sidebar.caption(f"Worksheet: {worksheet}")
+        st.sidebar.caption(f"Auto-refresh: every {refresh_seconds} seconds")
+        st.sidebar.caption("Edits appear automatically after the next refresh/rerun.")
     elif source == "Upload Excel/CSV":
         uploaded_file = st.sidebar.file_uploader("Upload Property Excel/CSV", type=["xlsx", "xls", "csv"])
+    else:
+        st.sidebar.warning("Using sample Excel data, not the live Google Sheet.")
 
-    return source, google_sheet_url, uploaded_file
+    st.sidebar.divider()
+    st.sidebar.caption(f"Last app refresh: {datetime.now().strftime('%I:%M:%S %p')}")
+    return source, uploaded_file
 
 
 def load_current_data():
     """Load fresh data and store the normalized raw, monthly, and alerts dataframes."""
-    source, google_sheet_url, uploaded_file = data_source_sidebar()
+    source, uploaded_file = data_source_sidebar()
 
     try:
-        df = load_data(source, google_sheet_url, uploaded_file)
+        df = load_data(source, uploaded_file)
     except Exception as exc:
         st.error(f"Could not load data: {exc}")
         if source == "Google Sheet":
-            st.info("Check that the Google Sheet link is shared as viewable. For the most reliable setup, use File → Share → Publish to web → CSV, then paste that CSV link.")
+            st.info(
+                "This app no longer asks users to paste a link. Configure the sheet once in "
+                ".streamlit/secrets.toml using GOOGLE_SHEET_ID or GOOGLE_SHEET_URL. "
+                "For a private company sheet, add Google service-account credentials and share "
+                "the sheet with the service-account email."
+            )
         st.stop()
 
     monthly = monthly_summary(df)
