@@ -12,10 +12,10 @@ DATA_SOURCE = "Google Sheet"
 # Paste your full Google Sheet URL here one time.
 # Example:
 # GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1abc123YourSheetId/edit?gid=0#gid=0"
-GOOGLE_SHEET_URL = ""
+GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1_4coHOmEkzY9cLYRtqmnUJ51LuqeY6yz/edit?gid=910919948#gid=910919948"
 
 # Or paste only the spreadsheet ID here instead.
-GOOGLE_SHEET_ID = "1_4coHOmEkzY9cLYRtqmnUJ51LuqeY6yz"
+GOOGLE_SHEET_ID = ""
 
 # Your worksheet/tab name from the bottom of Google Sheets.
 GOOGLE_WORKSHEET = "Property"
