@@ -15,7 +15,7 @@ DATA_SOURCE = "Google Sheet"
 GOOGLE_SHEET_URL = ""
 
 # Or paste only the spreadsheet ID here instead.
-GOOGLE_SHEET_ID = ""
+GOOGLE_SHEET_ID = "1_4coHOmEkzY9cLYRtqmnUJ51LuqeY6yz"
 
 # Your worksheet/tab name from the bottom of Google Sheets.
 GOOGLE_WORKSHEET = "Property"
