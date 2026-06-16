@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import re
+import time
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse, parse_qs
 
 import pandas as pd
 import streamlit as st
@@ -27,16 +29,41 @@ COLUMN_ALIASES = {
 
 
 def google_sheet_to_csv_url(url: str) -> str:
-    """Convert a Google Sheet share URL to a CSV export URL."""
+    """Convert a Google Sheet share URL to a CSV export URL.
+
+    Works with normal Google Sheet links, edit links, published CSV links,
+    and direct CSV export URLs. The sheet must be shared as viewable or
+    published to the web for Streamlit to read it without Google credentials.
+    """
+    if not url:
+        return url
+
+    url = url.strip()
     if "docs.google.com/spreadsheets" not in url:
         return url
+
+    # If the user already pasted a CSV export URL, preserve it but append cache buster later.
+    if "export?" in url and "format=csv" in url:
+        return url
+
     match = re.search(r"/d/([a-zA-Z0-9-_]+)", url)
     if not match:
         return url
-    gid_match = re.search(r"gid=([0-9]+)", url)
-    gid = gid_match.group(1) if gid_match else "0"
+
+    parsed = urlparse(url)
+    qs = parse_qs(parsed.query)
+    gid = qs.get("gid", [None])[0]
+    if gid is None:
+        gid_match = re.search(r"gid=([0-9]+)", url)
+        gid = gid_match.group(1) if gid_match else "0"
+
     sheet_id = match.group(1)
     return f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
+
+
+def add_cache_buster(url: str) -> str:
+    separator = "&" if "?" in url else "?"
+    return f"{url}{separator}_ts={int(time.time())}"
 
 
 def clean_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -84,9 +111,13 @@ def load_excel(path: str | Path, sheet_name: str = "Property") -> pd.DataFrame:
     return normalize_data(df)
 
 
-@st.cache_data(show_spinner=False, ttl=600)
 def load_google_sheet(url: str) -> pd.DataFrame:
-    csv_url = google_sheet_to_csv_url(url)
+    """Load Google Sheet live on every Streamlit rerun.
+
+    This is intentionally NOT cached. A cache-busting timestamp is appended so
+    Google/Streamlit do not serve stale CSV data after the sheet is updated.
+    """
+    csv_url = add_cache_buster(google_sheet_to_csv_url(url))
     df = pd.read_csv(csv_url)
     return normalize_data(df)
 
